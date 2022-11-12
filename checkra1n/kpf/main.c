@@ -2946,65 +2946,6 @@ void command_kpf() {
         info->slide = xnu_slide_value(hdr);
         info->flags = checkra1n_flags;
     }
-    
-#define APFS_VOL_ROLE_RECOVERY  0x0004
-    if(checkrain_option_enabled(gkpf_flags, checkrain_kpf_option_rootfull))
-    {
-        // wat?!
-        uint32_t len = 0;
-        dt_node_t* dev = dt_find(gDeviceTree, "system-vol");
-        if (!dev) panic("invalid devicetree: no device!");
-        uint32_t* val = NULL;
-        
-        val = dt_prop(dev, "vol.fs_type", &len);
-        if (!val) panic("invalid devicetree: no prop!");
-        // get fs_type
-        uint8_t* rwpatch = (uint8_t*)val;
-        printf("old system vol.fs_type: %016llx: %c\n", (uint64_t)val, rwpatch[1]);
-        // change ro -> rw
-        rwpatch[1] = 'w';
-        printf("new system vol.fs_type: %016llx: %c\n", (uint64_t)val, rwpatch[1]);
-        
-//        if(checkrain_option_enabled(gkpf_flags, checkrain_kpf_option_fakelaunchd)) {
-//            uint32_t len = 0;
-//            dt_node_t* dev = dt_find(gDeviceTree, "chosen");
-//            if (!dev) panic("invalid devicetree: no device!");
-//            uint32_t* val = dt_prop(dev, "root-matching", &len);
-//            if (!val) panic("invalid devicetree: no prop!");
-//
-//            char str[0x100]; // max size = 0x100
-//            memset(&str, 0x0, 0x100);
-//            sprintf(str, "<dict ID=\"0\"><key>IOProviderClass</key><string ID=\"1\">IOService</string><key>BSD Name</key><string ID=\"2\">disk1s%d</string></dict>", 8);
-//
-//            memset(val, 0x0, 0x100);
-//            memcpy(val, str, 0x100);
-//            printf("set new entry: %016llx: disk1s%d\n", (uint64_t)val, 8);
-//        }
-    }
-    
-    if(checkrain_option_enabled(gkpf_flags, checkrain_kpf_option_fakelaunchd))
-    {
-        
-        char *launchdString = (char*)memmem((unsigned char *)text_cstring_range->cacheable_base, text_cstring_range->size, (uint8_t *)"/sbin/launchd", strlen("/sbin/launchd"));
-        if (!launchdString) launchdString = (char*)memmem((unsigned char *)plk_text_range->cacheable_base, plk_text_range->size, (uint8_t *)"/sbin/launchd", strlen("/sbin/launchd"));
-        if (!launchdString) panic("no launchd string");
-        
-        // "/sbin/launchd" -> "/fake/loaderd"
-        *(launchdString+ 1) = 'f';
-        *(launchdString+ 2) = 'a';
-        *(launchdString+ 3) = 'k';
-        *(launchdString+ 4) = 'e';
-        
-        *(launchdString+ 6) = 'l';
-        *(launchdString+ 7) = 'o';
-        *(launchdString+ 8) = 'a';
-        *(launchdString+ 9) = 'd';
-        *(launchdString+10) = 'e';
-        *(launchdString+11) = 'r';
-        *(launchdString+12) = 'd';
-        puts("KPF: Changed launchd path");
-    }
-    
     if (checkrain_option_enabled(gkpf_flags, checkrain_option_verbose_boot))
         gBootArgs->Video.v_display = 0;
     tick_1 = get_ticks();
@@ -3054,35 +2995,6 @@ void overlay_cmd(const char* cmd, char* args) {
     loader_xfer_recv_count = 0;
 }
 
-// asdfugil's rootdev_module: https://github.com/asdfugil/rootdev_module
-char* set_rootdev(const char* rootdev) {
-    uint32_t len = 0;
-    dt_node_t* dev = dt_find(gDeviceTree, "chosen");
-    char str[256] = "<dict ID=\"0\"><key>IOProviderClass</key><string ID=\"1\">IOService</string><key>BSD Name</key><string ID=\"2\">";
-    char* val = (char*)dt_prop(dev, "root-matching", &len);
-    /* Only the NULL at last is counted, so 256 */
-    if (strlen(str) + strlen(rootdev) + sizeof("</string></dict>") > 256) {
-        errno = ENAMETOOLONG;
-        return NULL;
-    }
-    strcat(str, rootdev);
-    strcat(str, "</string></dict>");
-    memset((void*)val, 0x0, 256);
-    snprintf(val, 256, "%s", str);
-    return val;
-}
-
-void rootdev_command(const char* cmd, char* args) {
-    if (strlen(args) == 0) {
-        printf("%s usage: %s <new root device like disk0s1s8>\n", cmd, cmd);
-        return;
-    }
-    char* val = set_rootdev(args);
-    printf("set new entry: %016llx: %s \n", (uint64_t)val, args);
-    return;
-}
-
-
 void module_entry() {
     puts("");
     puts("");
@@ -3112,7 +3024,6 @@ void module_entry() {
     command_register("kpf_flags", "set flags for kernel patchfinder", kpf_flags_cmd);
     command_register("kpf", "running checkra1n-kpf without booting (use bootux afterwards)", command_kpf);
     command_register("overlay", "loads an overlay disk image", overlay_cmd);
-    command_register("set_rootdev", "Sets root device in root-matching in the device tree", rootdev_command);
 }
 char* module_name = "checkra1n-kpf2-12.0,16.2";
 
