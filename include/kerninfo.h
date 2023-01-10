@@ -47,12 +47,15 @@
 
 // KPF options
 #define checkrain_option_verbose_boot       (1 << 0)
+#define checkrain_kpf_option_rootfull       (1 << 8)
+#define checkrain_kpf_option_fakelaunchd    (1 << 9)
 
 // Global options
 #define checkrain_option_safemode           (1 << 0)
 #define checkrain_option_bind_mount         (1 << 1)
 #define checkrain_option_overlay            (1 << 2)
 #define checkrain_option_force_revert       (1 << 7) /* keep this at 7 */
+#define checkrain_option_rootfull           (1 << 8)
 
 typedef uint32_t checkrain_option_t, *checkrain_option_p;
 

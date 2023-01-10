@@ -2261,6 +2261,47 @@ void kpf_root_livefs_patch(xnu_pf_patchset_t* patchset) {
 }
 #endif
 
+bool allow_update_mount_callback(struct xnu_pf_patch *patch, uint32_t *opcode_stream) {
+    puts("KPF: Found allow_update_mount");
+#ifdef DEV_BUILD
+    printf("opstream 0x%016llx\n", xnu_ptr_to_va(opcode_stream));
+#endif
+    opcode_stream[0] = NOP;
+    return true;
+}
+
+void kpf_allow_mount_patch(xnu_pf_patchset_t* patchset) {
+    /*
+     fffffff008dbde8c         mov        x0, x19
+     fffffff008dbde90         bl         sub_fffffff007d386d8
+     fffffff008dbde94         tbnz       w0, 0xe, sub_fffffff008dbc6b0+6584   <- jump to "Updating mount to read/write mode is not allowed" -> NOP
+     fffffff008dbde98         ldr        w8, [sp, #0x90]
+     fffffff008dbde9c         and        w8, w8, #0xfffffffe
+     fffffff008dbdea0         str        w8, [sp, #0x90]
+     fffffff008dbdea4         add        x0, x22, #0x460
+     fffffff008dbdea8         add        x1, sp, #0x230
+     fffffff008dbdeac         add        x3, sp, #0x7c
+     fffffff008dbdeb0         mov        w2, #0x80
+     fffffff008dbdeb4         bl         sub_fffffff008dc5984
+     */
+    
+    
+    uint64_t matches[] = {
+        0x37700000, // tbnz  w0, 0xe,
+        0xb80000e8, // ldr   w8, [sp, #*]
+        0x121f7908, // and   w8, w8, #0xfffffffe
+    };
+    
+    uint64_t masks[] = {
+        0xfff8001f,
+        0xf88008ff,
+        0xffffffff,
+    };
+    
+    xnu_pf_maskmatch(patchset, "allow_update_mount", matches, masks, sizeof(masks)/sizeof(uint64_t), true, (void*)allow_update_mount_callback);
+}
+
+
 checkrain_option_t gkpf_flags, checkra1n_flags;
 
 int gkpf_didrun = 0;
@@ -2333,6 +2374,12 @@ void command_kpf() {
         kpf_root_livefs_patch(apfs_patchset);
     }
 #endif
+    
+    if(checkrain_option_enabled(gkpf_flags, checkrain_kpf_option_rootfull))
+    {
+        kpf_allow_mount_patch(apfs_patchset);
+    }
+    
     xnu_pf_emit(apfs_patchset);
     xnu_pf_apply(apfs_text_exec_range, apfs_patchset);
     xnu_pf_patchset_destroy(apfs_patchset);
@@ -2732,6 +2779,65 @@ void command_kpf() {
         info->slide = xnu_slide_value(hdr);
         info->flags = checkra1n_flags;
     }
+    
+#define APFS_VOL_ROLE_RECOVERY  0x0004
+    if(checkrain_option_enabled(gkpf_flags, checkrain_kpf_option_rootfull))
+    {
+        // wat?!
+        uint32_t len = 0;
+        dt_node_t* dev = dt_find(gDeviceTree, "system-vol");
+        if (!dev) panic("invalid devicetree: no device!");
+        uint32_t* val = NULL;
+        
+        val = dt_prop(dev, "vol.fs_type", &len);
+        if (!val) panic("invalid devicetree: no prop!");
+        // get fs_type
+        uint8_t* rwpatch = (uint8_t*)val;
+        //printf("old system vol.fs_type: %016llx: %c\n", (uint64_t)val, rwpatch[1]);
+        // change ro -> rw
+        rwpatch[1] = 'w';
+        //printf("new system vol.fs_type: %016llx: %c\n", (uint64_t)val, rwpatch[1]);
+        
+        if(checkrain_option_enabled(gkpf_flags, checkrain_kpf_option_fakelaunchd)) {
+            uint32_t len = 0;
+            dt_node_t* dev = dt_find(gDeviceTree, "chosen");
+            if (!dev) panic("invalid devicetree: no device!");
+            uint32_t* val = dt_prop(dev, "root-matching", &len);
+            if (!val) panic("invalid devicetree: no prop!");
+            
+            char str[0x100]; // max size = 0x100
+            memset(&str, 0x0, 0x100);
+            sprintf(str, "<dict ID=\"0\"><key>IOProviderClass</key><string ID=\"1\">IOService</string><key>BSD Name</key><string ID=\"2\">disk1s%d</string></dict>", 8);
+            
+            memset(val, 0x0, 0x100);
+            memcpy(val, str, 0x100);
+            printf("set new entry: %016llx: disk1s%d\n", (uint64_t)val, 8);
+        }
+    }
+    
+    if(checkrain_option_enabled(gkpf_flags, checkrain_kpf_option_fakelaunchd))
+    {
+        
+        char *launchdString = (char*)memmem((unsigned char *)text_cstring_range->cacheable_base, text_cstring_range->size, (uint8_t *)"/sbin/launchd", strlen("/sbin/launchd"));
+        if (!launchdString) launchdString = (char*)memmem((unsigned char *)plk_text_range->cacheable_base, plk_text_range->size, (uint8_t *)"/sbin/launchd", strlen("/sbin/launchd"));
+        if (!launchdString) panic("no launchd string");
+        
+        // "/sbin/launchd" -> "/fake/loaderd"
+        *(launchdString+ 1) = 'f';
+        *(launchdString+ 2) = 'a';
+        *(launchdString+ 3) = 'k';
+        *(launchdString+ 4) = 'e';
+        
+        *(launchdString+ 6) = 'l';
+        *(launchdString+ 7) = 'o';
+        *(launchdString+ 8) = 'a';
+        *(launchdString+ 9) = 'd';
+        *(launchdString+10) = 'e';
+        *(launchdString+11) = 'r';
+        *(launchdString+12) = 'd';
+        puts("KPF: Changed launchd path");
+    }
+    
     if (checkrain_option_enabled(gkpf_flags, checkrain_option_verbose_boot))
         gBootArgs->Video.v_display = 0;
     tick_1 = get_ticks();
