@@ -2505,7 +2505,7 @@ void command_kpf() {
             kpf_shared_region_root_dir_patch(xnu_text_exec_patchset);
         }
         // Signal to ramdisk that we can't have union mounts
-        checkra1n_flags |= checkrain_option_bind_mount;
+        //checkra1n_flags |= checkrain_option_bind_mount;
     }
 
     xnu_pf_emit(xnu_text_exec_patchset);
