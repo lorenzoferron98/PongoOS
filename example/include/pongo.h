@@ -17,7 +17,7 @@
 // SOFTWARE.
 //
 //
-//  Copyright (C) 2019-2022 checkra1n team
+//  Copyright (C) 2019-2023 checkra1n team
 //  This file is part of pongoOS.
 //
 #ifndef PONGOH
@@ -194,6 +194,7 @@ extern void wdt_disable();
 
 extern void (*preboot_hook)();
 extern boot_args * gBootArgs;
+extern uint64_t gTopOfKernelData;
 extern void* gEntryPoint;
 extern dt_node_t *gDeviceTree;
 extern uint64_t gIOBase;

@@ -1,7 +1,7 @@
 /*
  * pongoOS - https://checkra.in
  *
- * Copyright (C) 2019-2022 checkra1n team
+ * Copyright (C) 2019-2023 checkra1n team
  *
  * This file is part of pongoOS.
  *
@@ -36,15 +36,6 @@ _Noreturn void abort(void) { panic("abort()"); }
 _Noreturn void __chk_fail(void) { panic("__chk_fail()"); }
 _Noreturn void __stack_chk_fail(void) { panic("__stack_chk_fail()"); }
 uint64_t __stack_chk_guard = 0x4141414141414141;
-
-// This is just cursed. Commenting out `_reclaim_reent` below makes errno disappear.
-__asm__
-(
-    ".data\n"
-    ".globl _errno\n"
-    "_errno:\n"
-    ".space 4\n"
-);
 
 #if 0
 void *__memset_chk (void *dest, int c, size_t n, size_t dest_len) {
@@ -639,6 +630,7 @@ PONGO_EXPORT(serial_enable_rx);
 //PONGO_EXPORT(__memcpy_chk);
 PONGO_EXPORT(resize_loader_xfer_data);
 PONGO_EXPORT(gBootArgs);
+PONGO_EXPORT(gTopOfKernelData);
 PONGO_EXPORT(gEntryPoint);
 PONGO_EXPORT(gDeviceTree);
 PONGO_EXPORT(gIOBase);

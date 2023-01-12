@@ -1,7 +1,7 @@
 /*
  * pongoOS - https://checkra.in
  *
- * Copyright (C) 2019-2022 checkra1n team
+ * Copyright (C) 2019-2023 checkra1n team
  *
  * This file is part of pongoOS.
  *
@@ -250,9 +250,10 @@ extern void vm_flush_by_addr(struct vm_space* fl, uint64_t va);
 extern size_t memcpy_trap(void* dest, void* src, size_t size);
 extern void task_critical_enter();
 extern void task_critical_exit();
-extern boot_args * gBootArgs;
 extern void task_restart(struct task* task);
-extern void* gEntryPoint;
+extern boot_args *gBootArgs;
+extern uint64_t gTopOfKernelData;
+extern void *gEntryPoint;
 extern dt_node_t *gDeviceTree;
 extern uint64_t gIOBase;
 extern uint64_t gPMGRBase;
@@ -495,6 +496,7 @@ extern void lowlevel_cleanup(void);
 extern void lowlevel_setup(uint64_t phys_off, uint64_t phys_size);
 extern void map_full_ram(uint64_t phys_off, uint64_t phys_size);
 extern uint64_t linear_kvm_alloc(uint32_t size);
+extern void _command_register_internal(const char* name, const char* desc, void (*cb)(const char* cmd, char* args), bool hidden);
 static inline _Bool is_16k(void)
 {
     return ((get_mmfr0() >> 20) & 0xf) == 0x1;
