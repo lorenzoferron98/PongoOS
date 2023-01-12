@@ -35,8 +35,6 @@
 
 uint32_t offsetof_p_flags, *dyld_hook;
 
-static bool useConversionPatch = false;
-
 #ifdef DEV_BUILD
     #define DEVLOG(x, ...) do { \
         printf(x "\n", ##__VA_ARGS__); \
@@ -2483,8 +2481,7 @@ void command_kpf() {
     }
 
     kpf_dyld_patch(xnu_text_exec_patchset);
-    if(useConversionPatch)
-        kpf_conversion_patch(xnu_text_exec_patchset);
+    kpf_conversion_patch(xnu_text_exec_patchset);
     kpf_mac_mount_patch(xnu_text_exec_patchset);
     kpf_mac_dounmount_patch_0(xnu_text_exec_patchset);
     kpf_mac_vm_map_protect_patch(xnu_text_exec_patchset);
@@ -2866,29 +2863,6 @@ void checkra1n_flags_cmd(const char *cmd, char *args)
 void kpf_flags_cmd(const char *cmd, char *args)
 {
     set_flags(args, &gkpf_flags, "kpf_flags");
-}
-
-void set_conversion_patch(char *args)
-{
-    if(args[0] == '0')
-    {
-        printf("Disable conversion_patch\n");
-        useConversionPatch = false;
-    }
-    else if(args[0] == '1')
-    {
-        printf("Enable conversion_patch\n");
-        useConversionPatch = true;
-    }
-    else
-    {
-        printf("doNotUseConversionPatch flag: %d\n", false);
-    }
-}
-
-void kpf_set_conversion_patch_cmd(const char *cmd, char *args)
-{
-    set_conversion_patch(args);
 }
 
 void overlay_cmd(const char* cmd, char* args) {
