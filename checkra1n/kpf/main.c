@@ -3112,7 +3112,6 @@ void module_entry() {
     command_register("kpf_flags", "set flags for kernel patchfinder", kpf_flags_cmd);
     command_register("kpf", "running checkra1n-kpf without booting (use bootux afterwards)", command_kpf);
     command_register("overlay", "loads an overlay disk image", overlay_cmd);
-    command_register("conversion_patch", "conversion patch", kpf_set_conversion_patch_cmd);
     command_register("set_rootdev", "Sets root device in root-matching in the device tree", rootdev_command);
 }
 char* module_name = "checkra1n-kpf2-12.0,16.2";
