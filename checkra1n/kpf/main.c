@@ -2542,10 +2542,10 @@ void command_kpf() {
     }
 #endif
     
-    if(checkrain_option_enabled(gkpf_flags, checkrain_kpf_option_rootfull))
-    {
+    //if(checkrain_option_enabled(gkpf_flags, checkrain_kpf_option_rootfull))
+    //{
         kpf_allow_mount_patch(apfs_patchset);
-    }
+    //}
     
     xnu_pf_emit(apfs_patchset);
     xnu_pf_apply(apfs_text_exec_range, apfs_patchset);
