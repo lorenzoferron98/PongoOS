@@ -785,6 +785,9 @@ bool kpf_trustcache_callback(struct xnu_pf_patch *patch, uint32_t *opcode_stream
     // We legit, trust me bro.
     lookup_in_static_trust_cache[0] = 0xd2800020; // movz x0, 1
     lookup_in_static_trust_cache[1] = RET;
+    
+    if (bl[1] == 0x52802028) bl[0] = 0x52802020;
+    
     return true;
 }
 
