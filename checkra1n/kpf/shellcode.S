@@ -39,7 +39,6 @@
 .globl _dyld_hook_vnode_lookup_bl
 .globl _dyld_hook_vnode_put_bl
 
-.globl _dyld_hook_shellcode
 .align 2
 _sandbox_shellcode:
 b sandbox_shellcode_m
