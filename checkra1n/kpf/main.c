@@ -155,6 +155,14 @@ uint32_t* follow_call(uint32_t *from)
     return target;
 }
 
+const char *get_string(uint32_t *opcode_stream) {
+    uint64_t page = ((uint64_t)(opcode_stream) & ~0xfffULL) + adrp_off(opcode_stream[0]);
+    uint32_t off = (opcode_stream[1] >> 10) & 0xfff;
+    const char *str = (const char *)(page + off);
+    
+    return str;
+}
+
 // Imports from shellcode.S
 extern uint32_t sandbox_shellcode[], sandbox_shellcode_setuid_patch[], dyld_hook_shellcode[], sandbox_shellcode_ptrs[], sandbox_shellcode_end[];
 extern uint32_t nvram_shc[], nvram_shc_end[];
@@ -786,6 +794,7 @@ bool kpf_trustcache_callback(struct xnu_pf_patch *patch, uint32_t *opcode_stream
     lookup_in_static_trust_cache[0] = 0xd2800020; // movz x0, 1
     lookup_in_static_trust_cache[1] = RET;
     
+    // Only patch this when not looking up directly
     if (bl[1] == 0x52802028) bl[0] = 0x52802020;
     
     return true;
@@ -1728,6 +1737,88 @@ bool kpf_apfs_patches_mount(struct xnu_pf_patch* patch, uint32_t* opcode_stream)
     *f_apfs_privcheck = 0xeb00001f; // cmp x0, x0
     return true;
 }
+
+bool kpf_apfs_auth_patches(struct xnu_pf_patch* patch, uint32_t* opcode_stream) {
+    const char *str = get_string(opcode_stream);
+    
+    if (strcmp(str, "is_root_hash_authentication_required_ios") == 0) {
+        uint32_t* func_start = find_prev_insn(opcode_stream, 0x25, 0xa98003e0, 0xffc003e0); //stp x*, x*, [sp, #-0x*]!
+        
+        if (!func_start) {
+            func_start = find_prev_insn(opcode_stream, 0x25, 0xd10000ff, 0xfffe73ff); // sub sp, sp, 0x*
+            
+            if (!func_start) {
+                printf("root authentication: failed to find stack marker!\n");
+                return false;
+            }
+        }
+        
+        func_start[0] = 0xd2800000;
+        func_start[1] = RET;
+
+        puts("KPF: Found root authentication required");
+        
+        return true;
+    } else if (strcmp(str, "\"could not authenticate personalized root hash! (%p, %zu)\\n\" @%s:%d") == 0) {
+        // ios 16.4 broke this a lot, so we're just gonna find the string and do stuff with that
+        
+        uint32_t *success_stream = opcode_stream;
+        
+        while (true) {
+            if ((success_stream[0] & 0x0f000000) == 0x00000000 && // adrp
+                (success_stream[1] & 0xff000000) == 0x91000000) { // add
+                    const char *str = get_string(success_stream);
+                    if (strcmp(str, "%s:%d: %s successfully validated on-disk root hash\n") == 0) {
+                        success_stream = find_prev_insn(opcode_stream, 0x10, 0xf90003e0, 0xffc003e0); // str x*, [sp, #0x*]
+                        
+                        break;
+                    }
+            }
+                    
+            success_stream++;
+        }
+        
+        if (!success_stream) {
+            printf("kpf_apfs_personalized_hash: failed to find success!\n");
+            return false;
+        }
+        
+        uint64_t addr_success = xnu_ptr_to_va(success_stream);
+        
+        printf("KPF: found kpf_apfs_personalized_hash\n");
+        
+        uint32_t* cbz1 = find_prev_insn(opcode_stream, 0x16, 0x34000000, 0x7e000000);
+        
+        if (!cbz1) {
+            printf("kpf_apfs_personalized_hash: failed to find first cbz\n");
+            return false;
+        }
+        
+        uint32_t* cbz_fail = find_prev_insn(opcode_stream, 0x16, 0x34000000, 0x7e000000);
+
+        if (!cbz_fail) {
+            printf("kpf_apfs_personalized_hash: failed to find fail cbz\n");
+            return false;
+        }
+
+        uint64_t addr_fail = xnu_ptr_to_va(cbz_fail) + (sxt32(cbz_fail[0] >> 5, 19) << 2);
+
+        uint32_t *fail_stream = xnu_va_to_ptr(addr_fail);
+
+        DEVLOG("addrs: success is 0x%lx, fail is 0x%lx, target is 0x%llx", addr_success, xnu_ptr_to_va(cbz_fail), addr_fail);
+        
+        uint32_t branch_success = 0x14000000 | (((addr_success - addr_fail) >> 2) & 0x03ffffff);
+        
+        DEVLOG("branch is 0x%x (BE)", branch_success);
+
+        fail_stream[0] = branch_success;
+
+        return true;
+    } else {
+        return false;
+    }
+}
+
 void kpf_apfs_patches(xnu_pf_patchset_t* patchset, bool have_union) {
     // there is a check in the apfs mount function that makes sure that the kernel task is calling this function (current_task() == kernel_task)
     // we also want to call it so we patch that check out
@@ -1786,7 +1877,18 @@ void kpf_apfs_patches(xnu_pf_patchset_t* patchset, bool have_union) {
         };
         xnu_pf_maskmatch(patchset, "apfs_patch_rename", i_matches, i_masks, sizeof(i_matches)/sizeof(uint64_t), true, (void*)kpf_apfs_patches_rename);
     }
+    
+        uint64_t iii_matches[] = {
+            0x00000000,
+            0x91000000,
+        };
+        uint64_t iii_masks[] = {
+            0x0f000000,
+            0xff000000,
+        };
+        xnu_pf_maskmatch(patchset, "apfs_auth_patches", iii_matches, iii_masks, sizeof(iii_matches)/sizeof(uint64_t), true, (void*)kpf_apfs_auth_patches);
 }
+
 static uint32_t* amfi_ret;
 bool kpf_amfi_execve_tail(struct xnu_pf_patch* patch, uint32_t* opcode_stream) {
     if(amfi_ret)
@@ -1931,11 +2033,8 @@ bool kpf_amfi_mac_syscall_low(struct xnu_pf_patch *patch, uint32_t *opcode_strea
 }
 
 // written in nano fr
-// written in nano fr
 bool kpf_amfi_hash_agility(struct xnu_pf_patch *patch, uint32_t *opcode_stream) {
-    uint64_t page = ((uint64_t)(opcode_stream) & ~0xfffULL) + adrp_off(opcode_stream[0]);
-    uint32_t off = (opcode_stream[1] >> 10) & 0xfff;
-    const char *str = (const char *)(page + off);
+    const char *str = get_string(opcode_stream);
 
     if (strcmp(str, "AMFI: \'%s\': no hash agility data and first cd hash type (%d) does not match best cd hash type (%d).\n") == 0) {
         uint32_t *b = find_next_insn(opcode_stream, 0x6, 0x14000000, 0xfc000000);
@@ -2642,9 +2741,10 @@ void command_kpf() {
 
     struct mach_header_64* hdr = xnu_header();
     xnu_pf_range_t* text_cstring_range = xnu_pf_section(hdr, "__TEXT", "__cstring");
+    xnu_pf_patchset_t* text_patchset = xnu_pf_patchset_create(XNU_PF_ACCESS_32BIT);
 
-#ifdef DEV_BUILD
     xnu_pf_range_t* text_const_range = xnu_pf_section(hdr, "__TEXT", "__const");
+#ifdef DEV_BUILD
     kpf_kernel_version_init(text_const_range);
 #endif
 
