@@ -1788,14 +1788,14 @@ bool kpf_apfs_auth_patches(struct xnu_pf_patch* patch, uint32_t* opcode_stream) 
         
         printf("KPF: found kpf_apfs_personalized_hash\n");
         
-        uint32_t* cbz1 = find_prev_insn(opcode_stream, 0x16, 0x34000000, 0x7e000000);
+        uint32_t* cbz1 = find_prev_insn(opcode_stream, 0x100, 0x34000000, 0x7e000000);
         
         if (!cbz1) {
             printf("kpf_apfs_personalized_hash: failed to find first cbz\n");
             return false;
         }
         
-        uint32_t* cbz_fail = find_prev_insn(opcode_stream, 0x16, 0x34000000, 0x7e000000);
+        uint32_t* cbz_fail = find_prev_insn(cbz1 - 1, 0x16, 0x34000000, 0x7e000000);
 
         if (!cbz_fail) {
             printf("kpf_apfs_personalized_hash: failed to find fail cbz\n");
